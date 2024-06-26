@@ -1,6 +1,6 @@
 local buttonAPI = require "buttonAPI"
 local eventHandler = require "eventHandler"
-local readln = require "/readln"
+local readln = require "readln"
 
 term.setPaletteColour(colors.red,0xCF0000)
 term.setPaletteColour(colors.orange,0xFD7D1F)
