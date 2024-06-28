@@ -167,18 +167,19 @@ function mapToWorld(dir,centerx,centery,ref,refy,x,y,zoom)
 end
 
 function addMapPoint(text,data,bundle,parent,dir,centerx,centery,state,x,y)
+    x = x or 0
+    y = y or 0
     refx,refy,zoom = state.x,state.y,state.zoom
-    local pos = worldToMap(dir,centerx,centery,refx,refy,x,y,zoom)
-    return buttonAPI.mkbutton{
-        x = math.floor(pos.x),
-        y = math.floor(pos.y),
+    local mapPoint = buttonAPI.mkbutton{
+        x = 1,
+        y = 1,
         text = text,
         data = data,
         active = false,
         selected = false,
         bg = colors.black,
         onDown = function(self,but,mx,my)
-            if self.active and but == 1 and self:isIn(mx,my) then
+            if self.active and but == 1 and self:isIn(mx,my) and mapRenderer:isIn(mx,my) then
                 if self.clicked then
                     self.selected = false
                     self.clicked = false
@@ -188,13 +189,29 @@ function addMapPoint(text,data,bundle,parent,dir,centerx,centery,state,x,y)
                     self.clicked = true
                     self.fg = colors.cyan
                 end
+            elseif self.active and mapRenderer:isIn(mx,my) then
+                if not self.group then
+                    self.selected = false
+                    self.clicked = false
+                    self.fg = colors.white
+                end
+            end
+        end,
+        onKey = function(self,key)
+            if key == "leftShift" then
+                self.group = true
+            end
+        end,
+        onKeyUp = function(self,key)
+            if key == "leftShift" then
+                self.group = false
             end
         end,
         onTick = function(self)
             refx,refy,zoom = state.x,state.y,state.zoom
-            pos = worldToMap(dir,centerx,centery,refx,refy,x,y,zoom)
-            self.x = math.floor(pos.x)
-            self.y = math.floor(pos.y)
+            self.pos = worldToMap(dir,centerx,centery,refx,refy,self.blockPos.x,self.blockPos.y,zoom)
+            self.x = math.floor(self.pos.x)
+            self.y = math.floor(self.pos.y)
             self.active = parent.clicked
             if not self.isIn({
                 isBoxed = false,
@@ -209,6 +226,8 @@ function addMapPoint(text,data,bundle,parent,dir,centerx,centery,state,x,y)
             end
         end
     }.addTo(bundle)
+    mapPoint.blockPos = {x=x,y=y}
+    return mapPoint
 end
 
 bg = buttonAPI.mkbutton(
@@ -285,6 +304,10 @@ mapRenderer = buttonAPI.mkbutton(
         bg = colors.black,
         onTick = function(self)
             self.active = map.clicked
+            if computer.pos then
+                computer.blockPos.x = tonumber(readx.text) or 0
+                computer.blockPos.y = tonumber(readz.text) or 0
+            end
         end,
         onDown = function(self,but,mx,my)
             self.pre = {x = mx,y = my}
@@ -305,8 +328,8 @@ mapRenderer = buttonAPI.mkbutton(
                     x = 0,
                     y = 0
                 }
-                mapState.x = mapState.x-(mx-self.pre.x)*4
-                mapState.y = mapState.y-(my-self.pre.y)*4
+                mapState.x = mapState.x-(mx-self.pre.x)
+                mapState.y = mapState.y-(my-self.pre.y)
                 self.pre = {x = mx,y = my}
             end
         end
@@ -317,7 +340,7 @@ function simpleMapAdd(text,data,dir,state,x,y)
     return addMapPoint(text,data,bundle,map,dir,(mapRenderer.x+mapRenderer.length)/2,(mapRenderer.y+mapRenderer.height)/2,state,x,y)
 end
 
-computer = simpleMapAdd("x",{},dir,mapState,6,2)
+computer = simpleMapAdd("x",{},dir,mapState)
 
 point = simpleMapAdd("o",{},dir,mapState,-14,-5)
 
@@ -433,6 +456,8 @@ info = buttonAPI.mkbutton(
     }
 ).addTo(bundle)
 
+
+
 eventHandler.eventLookUp = {
     {
         event = "mouse_click",
@@ -482,6 +507,13 @@ eventHandler.eventLookUp = {
                 mapState.x = mapState.x+1
             end
             buttonAPI.handle(bundle,"key",key)
+        end
+    },
+    {
+        event = "key_up",
+        react = function(eventData)
+            local key = keys.getName(eventData[2])
+            buttonAPI.handle(bundle,"key_up",key)
         end
     },
     {

@@ -23,7 +23,8 @@ function buttonAPI.mkbutton(button)
         onTick = button.onTick or function()end,
         onScroll = button.onScroll or function()end,
         onKey = button.onKey or function()end,
-        onChar = button.onChar or function()end
+        onChar = button.onChar or function()end,
+        onKeyUp = button.onKeyUp or function()end
     }
     if button.active == nil then
         b.active = true
@@ -143,6 +144,11 @@ function buttonAPI.handle(bundle,case,...)
         key = args[1]
         for i,button in ipairs(bundle) do
             button:onKey(key)
+        end
+    elseif case == "key_up" then
+        key = args[1]
+        for i,button in ipairs(bundle) do
+            button:onKeyUp(key)
         end
     end
 end
