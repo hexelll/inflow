@@ -9,6 +9,8 @@ width,height = term.getSize()
 function buttonAPI.mkbutton(button)
     local b = {
         isBoxed = button.isBoxed or false,
+        clicked = button.clicked or false,
+        unclickable = button.unclickable or false,
         x = button.x or 1,
         y = button.y or 1,
         text = button.text or 'button',
@@ -19,7 +21,9 @@ function buttonAPI.mkbutton(button)
         onDrag = button.onDrag or function()end,
         onRender = button.onRender or function()end,
         onTick = button.onTick or function()end,
-        onScroll = button.onScroll or function()end
+        onScroll = button.onScroll or function()end,
+        onKey = button.onKey or function()end,
+        onChar = button.onChar or function()end
     }
     if button.active == nil then
         b.active = true
@@ -96,15 +100,18 @@ function buttonAPI.render(bundle,win)
     win.setVisible(true)
 end
 
-function buttonAPI.handle(bundle,case,but,mx,my)
+function buttonAPI.handle(bundle,case,...)
+    args = {...}
     if case == "down" then
+        but,mx,my = args[1],args[2],args[3]
         for i,button in ipairs(bundle) do
             button:onDown(but,mx,my)
-            if button.active and button:isIn(mx,my) then
+            if button.active and button.unclickable and button:isIn(mx,my) then
                 break
             end
         end
     elseif case == "up" then
+        but,mx,my = args[1],args[2],args[3]
         for i,button in ipairs(bundle) do
             button:onUp(but,mx,my)
             if button:isIn(mx,my) then    
@@ -112,6 +119,7 @@ function buttonAPI.handle(bundle,case,but,mx,my)
             end
         end
     elseif case == "drag" then
+        but,mx,my = args[1],args[2],args[3]
         for i,button in ipairs(bundle) do
             button:onDrag(but,mx,my)
             if button:isIn(mx,my) then
@@ -119,11 +127,22 @@ function buttonAPI.handle(bundle,case,but,mx,my)
             end
         end
     elseif case == "scroll" then
+        dir,mx,my = args[1],args[2],args[3]
         for i,button in ipairs(bundle) do
-            button:onScroll(but,mx,my)
+            button:onScroll(dir,mx,my)
             if button:isIn(mx,my) then
                 break
             end
+        end
+    elseif case == "char" then
+        char = args[1]
+        for i,button in ipairs(bundle) do
+            button:onChar(char)
+        end
+    elseif case == "key" then
+        key = args[1]
+        for i,button in ipairs(bundle) do
+            button:onKey(key)
         end
     end
 end

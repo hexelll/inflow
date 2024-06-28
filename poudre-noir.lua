@@ -1,6 +1,5 @@
 local buttonAPI = require "buttonAPI"
 local eventHandler = require "eventHandler"
-local readln = require "readln"
 
 term.setPaletteColour(colors.red,0xCF0000)
 term.setPaletteColour(colors.orange,0xFD7D1F)
@@ -14,7 +13,15 @@ bundle = {}
 
 dir = "north"
 
-function makeReader(bundle,parent,text,textbg,bg,lim,x,y)
+function makeReader(args--[[bundle,parent,text,textbg,bg,lim,x,y]])
+    bundle = args.bundle or {}
+    text = args.text or ""
+    textbg = args.textbg or colors.lightGray
+    x = args.x or 1
+    y = args.y or 1
+    parent = args.parent or {}
+    lim = args.lim
+    
     local textB = buttonAPI.mkbutton(
         {
             active = false,
@@ -38,6 +45,27 @@ function makeReader(bundle,parent,text,textbg,bg,lim,x,y)
             y = y,
             text = " ",
             onTick = function(self)
+                self.draw = function(button)
+                    button.win.setCursorPos(button.x,button.y)
+                    button.win.setBackgroundColor(button.bg)
+                    button.win.setTextColor(button.fg)
+                    button.win.write(button.text)
+                    for i=1,button.height-1 do
+                        button.win.setCursorPos(button.x,button.y+i)
+                        button.win.write(button.text)
+                    end
+                    if button.clicked then
+                        button.win.setCursorPos(button.x+button.cursor-1,button.y)
+                        button.win.setBackgroundColor(button.fg)
+                        button.win.setTextColor(button.bg)
+                        button.win.write(string.sub(button.text,button.cursor,button.cursor))
+                    end
+                    button.win.setBackgroundColor(colors.black)
+                    button.win.setTextColor(colors.white)
+                end
+                if string.sub(self.text,#self.text,#self.text) == "" then
+                    self.text = self.text.." "
+                end
                 self.length = #self.text
                 if parent.clicked then
                     self.active = true
@@ -46,14 +74,46 @@ function makeReader(bundle,parent,text,textbg,bg,lim,x,y)
                 end
             end,
             onDown = function(self,but,mx,my)
-                if self.active and self:isIn(mx,my) then
-                    self.bg = textbg
-                    self.text = readln(self.x,self.y,false,self,false,lim,false,self.text,mx-self.x)
-                    if self.text == "" then self.text = " " end
-                    if string.sub(self.text,#self.text,#self.text) == " " and #self.text ~= 1 then
-                        self.text = string.sub(self.text,1,#self.text-1)
+                if self:isIn(mx,my) then
+                    self.bg = colors.orange
+                    self.clicked = true
+                    self.cursor = mx-self.x+1
+                else
+                    self.bg = colors.gray
+                    self.clicked = false
+                end
+            end,
+            onChar = function(self,char)
+                if self.clicked then
+                    if args.lim then
+                        local done = false
+                        for i,c in pairs(lim) do
+                            if char == c then
+                                done = true
+                            end
+                        end
+                        if done then
+                            self.text = string.sub(self.text,1,self.cursor-1)..char..string.sub(self.text,self.cursor,#self.text)
+                            self.cursor = self.cursor + 1
+                        end
+                    else
+                        self.text = string.sub(self.text,1,self.cursor-1)..char..string.sub(self.text,self.cursor,#self.text)
+                        self.cursor = self.cursor + 1
                     end
-                    self.bg = bg
+                end
+            end,
+            onKey = function(self,key)
+                if self.clicked then
+                    if key == "backspace" and self.cursor > 1 then
+                        self.text = string.sub(self.text,1,self.cursor-2)..string.sub(self.text,self.cursor,#self.text)
+                        self.cursor = self.cursor-1
+                    elseif key == "delete" and self.cursor < #self.text-1 then
+                        self.text = string.sub(self.text,1,self.cursor)..string.sub(self.text,self.cursor+2,#self.text)
+                    elseif key == "left" and self.cursor > 1 then
+                        self.cursor = self.cursor - 1
+                    elseif key == "right" and self.cursor < #self.text then
+                        self.cursor = self.cursor + 1
+                    end
                 end
             end
         }
@@ -118,7 +178,7 @@ function addMapPoint(text,data,bundle,parent,dir,centerx,centery,state,x,y)
         selected = false,
         bg = colors.black,
         onDown = function(self,but,mx,my)
-            if but == 1 and self:isIn(mx,my) then
+            if self.active and but == 1 and self:isIn(mx,my) then
                 if self.clicked then
                     self.selected = false
                     self.clicked = false
@@ -159,7 +219,8 @@ bg = buttonAPI.mkbutton(
         length = width-2,
         height = height-2,
         bg = colors.cyan,
-        isBoxed = true
+        isBoxed = true,
+        unclickable = true
     }
 ).addTo(bundle,#bundle+1)
 config = buttonAPI.mkbutton(
@@ -167,7 +228,7 @@ config = buttonAPI.mkbutton(
         text = "config ",
         y = bg.y,
         onDown = function(self,but,mx,my)
-            if self:isIn(mx,my) then
+            if self:isIn(mx,my) and self.active then
                 if not self.clicked then
                     self.bg = colors.lightGray
                     self.clicked = true
@@ -206,6 +267,12 @@ map = buttonAPI.mkbutton(
 map.x = width - map.length
 makeHeader(bundle,map,"o|",colors.orange)
 
+local mapState = {
+    x = 0,
+    y = 0,
+    zoom = 1,
+}
+
 mapRenderer = buttonAPI.mkbutton(
     {
         active = false,
@@ -214,10 +281,34 @@ mapRenderer = buttonAPI.mkbutton(
         x = bg.x+1,
         y = bg.y+1,
         height = 13,
-        length = 30,
+        length = 25,
         bg = colors.black,
         onTick = function(self)
             self.active = map.clicked
+        end,
+        onDown = function(self,but,mx,my)
+            self.pre = {x = mx,y = my}
+        end,
+        onUp = function(self,but,mx,my)
+            self.pre = {x = mx,y = my}
+        end,
+        onScroll = function(self,dir,mx,my)
+            if self:isIn(mx,my) then
+                if mapState.zoom - dir*0.25 > 0 then
+                    mapState.zoom = mapState.zoom - dir*0.25
+                end
+            end
+        end,
+        onDrag = function(self,but,mx,my)
+            if self:isIn(mx,my) then
+                self.pre = self.pre or {
+                    x = 0,
+                    y = 0
+                }
+                mapState.x = mapState.x-(mx-self.pre.x)*4
+                mapState.y = mapState.y-(my-self.pre.y)*4
+                self.pre = {x = mx,y = my}
+            end
         end
     }
 ).addTo(bundle)
@@ -225,12 +316,6 @@ mapRenderer = buttonAPI.mkbutton(
 function simpleMapAdd(text,data,dir,state,x,y)
     return addMapPoint(text,data,bundle,map,dir,(mapRenderer.x+mapRenderer.length)/2,(mapRenderer.y+mapRenderer.height)/2,state,x,y)
 end
-
-local mapState = {
-    x = 0,
-    y = 0,
-    zoom = 1,
-}
 
 computer = simpleMapAdd("x",{},dir,mapState,6,2)
 
@@ -261,10 +346,10 @@ indicator = buttonAPI.mkbutton(
     }
 ).addTo(bundle)
 
-remove = buttonAPI.mkbutton{
+del = buttonAPI.mkbutton{
     x = mapRenderer.x,
     y = mapRenderer.y + mapRenderer.height-1,
-    text = "|remove|",
+    text = "|del|",
     bg = colors.gray,
     onTick = function(self)
         self.active = map.clicked
@@ -290,21 +375,69 @@ remove = buttonAPI.mkbutton{
     end
 }.addTo(bundle)
 
-readx = makeReader(bundle,config,"x|",colors.orange,colors.gray,{'0','1','2','3','4','5','6','7','8','9'},bg.x+3,bg.y)
-ready = makeReader(bundle,config,"y|",colors.orange,colors.gray,{'0','1','2','3','4','5','6','7','8','9'},bg.x+3,bg.y+2)
-readz = makeReader(bundle,config,"z|",colors.orange,colors.gray,{'0','1','2','3','4','5','6','7','8','9'},bg.x+3,bg.y+4)
-
-local pre = {
-    x = 0,
-    y = 0
-}
+readx = makeReader({
+    bundle = bundle,
+    parent = config,
+    text = "x|",
+    textbg = colors.orange,
+    bg = colors.orange,
+    lim = {'-','0','1','2','3','4','5','6','7','8','9'},
+    x = bg.x+3,
+    y = bg.y
+})
+ready = makeReader({
+    bundle = bundle,
+    parent = config,
+    text = "y|",
+    textbg = colors.orange,
+    bg = colors.orange,
+    lim = {'-','0','1','2','3','4','5','6','7','8','9'},
+    x = bg.x+3,
+    y = bg.y+2
+})
+readz = makeReader({
+    bundle = bundle,
+    parent = config,
+    text = "z|",
+    textbg = colors.orange,
+    bg = colors.orange,
+    lim = {'-','0','1','2','3','4','5','6','7','8','9'},
+    x = bg.x+3,
+    y = bg.y+4
+})
+infoRenderer = buttonAPI.mkbutton(
+    {
+        active = false,
+        isBoxed = true,
+        x = mapRenderer.x+mapRenderer.length,
+        y = mapRenderer.y,
+        text = "",
+        length = 13,
+        height = mapRenderer.height,
+        bg = colors.gray,
+        onTick = function(self)
+            self.active = map.clicked
+        end
+    }
+).addTo(bundle)
+info = buttonAPI.mkbutton(
+    {
+        active = false,
+        x = mapRenderer.x+mapRenderer.length-1,
+        y = mapRenderer.y-1,
+        bg = colors.orange,
+        text = "|info|",
+        onTick = function(self)
+            self.active = map.clicked
+        end
+    }
+).addTo(bundle)
 
 eventHandler.eventLookUp = {
     {
         event = "mouse_click",
         react = function(eventData)
             local but,mx,my = eventData[2],eventData[3],eventData[4]
-            pre = {x=mx,y=my}
             buttonAPI.handle(bundle,"down",but,mx,my)
             if but == 2 and map.clicked then
                 if mapRenderer:isIn(mx,my) then
@@ -318,7 +451,6 @@ eventHandler.eventLookUp = {
         event = "mouse_up",
         react = function(eventData)
             local but,mx,my = eventData[2],eventData[3],eventData[4]
-            pre = {x=mx,y=my}
             buttonAPI.handle(bundle,"up",but,mx,my)
         end
     },
@@ -326,9 +458,6 @@ eventHandler.eventLookUp = {
         event = "mouse_drag",
         react = function(eventData)
             local but,mx,my = eventData[2],eventData[3],eventData[4]
-            mapState.x = mapState.x-(mx-pre.x)*4
-            mapState.y = mapState.y-(my-pre.y)*4
-            pre = {x = mx,y = my}
             buttonAPI.handle(bundle,"drag",but,mx,my)
         end
     },
@@ -336,9 +465,6 @@ eventHandler.eventLookUp = {
         event = "mouse_scroll",
         react = function(eventData)
             local dir, x, y = eventData[2],eventData[3],eventData[4]
-            if mapState.zoom - dir*0.25 > 0 then
-                mapState.zoom = mapState.zoom - dir*0.25
-            end
             buttonAPI.handle(bundle,"scroll",dir,x,y)
         end
     },
@@ -355,6 +481,14 @@ eventHandler.eventLookUp = {
             elseif key == "d" then
                 mapState.x = mapState.x+1
             end
+            buttonAPI.handle(bundle,"key",key)
+        end
+    },
+    {
+        event = "char",
+        react = function(eventData)
+            local char = eventData[2]
+            buttonAPI.handle(bundle,"char",char)
         end
     }
 }
