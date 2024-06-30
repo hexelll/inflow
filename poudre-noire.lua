@@ -1,3 +1,7 @@
+p = peripheral
+modem = p.find("modem")
+rednet.open(p.getName(modem))
+
 local buttonAPI = require "buttonAPI"
 local eventHandler = require "eventHandler"
 
@@ -13,13 +17,12 @@ bundle = {}
 
 dir = "north"
 
-table.remove = function(tab,i)
-    for j = i,#tab do
-        tab[j] = tab[j+1]
-    end
-end
+configsContent = fs.open("configs.txt","r").readAll()
+configs = textutils.unserialise(configsContent)
+configs.zoomSpeed = configs.zoomSpeed or 1
+configs.mapSpeed = configs.mapSpeed or 2
 
-function makeReader(args--[[bundle,parent,text,textbg,bg,lim,x,y]])
+function makeReader(args)
     local bundle = args.bundle or {}
     local text = args.text or ""
     local textbg = args.textbg or colors.lightGray
@@ -83,7 +86,7 @@ function makeReader(args--[[bundle,parent,text,textbg,bg,lim,x,y]])
                 end
             end,
             onDown = function(self,but,mx,my)
-                if self:isIn(mx,my) then
+                if self.active and self:isIn(mx,my) then
                     self.bg = bgc
                     self.clicked = true
                     self.cursor = mx-self.x+1
@@ -317,6 +320,43 @@ config = buttonAPI.mkbutton(
 config.x = width - config.length
 makeHeader(bundle,config,"o|",colors.orange)
 
+save = buttonAPI.mkbutton(
+    {
+        text = "save",
+        x = bg.x+1,
+        y = bg.y+10,
+        onTick = function(self)
+            self.active = config.clicked
+        end,
+        onDown = function(self,but,mx,my)
+            if self.active and self:isIn(mx,my) then
+                self.bg = colors.lightGray
+                self.clicked = true
+                configs.x = tonumber(readx.text) or configs.x or 0
+                configs.y = tonumber(ready.text) or configs.y or 0
+                configs.z = tonumber(readz.text) or configs.z or 0
+                configs.mapSpeed = tonumber(readMapSpeed.text) or configs.mapSpeed or 2
+                configs.zoomSpeed = tonumber(readZoomSpeed.text) or configs.zoomSpeed or 0.25
+                configsFile = fs.open("configs.txt","w")
+                configsFile.write(textutils.serialise(configs))
+                configsFile.close()
+            end
+        end,
+        onUp = function(self,but,mx,my)
+            if self.clicked then
+                self.bg = colors.gray
+                self.clicked = true
+            end
+        end
+    }
+).addTo(bundle)
+makeHeader(
+    bundle,
+    save,
+    ">",
+    colors.orange
+)
+
 map = buttonAPI.mkbutton(
     {
         text = "map ",
@@ -342,8 +382,8 @@ map.x = width - map.length
 makeHeader(bundle,map,"o|",colors.orange)
 
 local mapState = {
-    x = 0,
-    y = 0,
+    x = configs.x or 0,
+    y = configs.z or 0,
     zoom = 1,
 }
 
@@ -360,9 +400,9 @@ mapRenderer = buttonAPI.mkbutton(
         onTick = function(self)
             self.active = map.clicked
             if computer.pos then
-                computer.blockPos.x = tonumber(readx.text) or 0
-                computer.blockPos.y = tonumber(ready.text) or 0
-                computer.blockPos.z = tonumber(readz.text) or 0
+                computer.blockPos.x = tonumber(readx.text) or configs.x or 0
+                computer.blockPos.y = tonumber(ready.text) or configs.y or 0
+                computer.blockPos.z = tonumber(readz.text) or configs.z or 0
             end
         end,
         onDown = function(self,but,mx,my)
@@ -373,8 +413,8 @@ mapRenderer = buttonAPI.mkbutton(
         end,
         onScroll = function(self,dir,mx,my)
             if self:isIn(mx,my) then
-                if mapState.zoom - dir*0.25 > 0 then
-                    mapState.zoom = mapState.zoom - dir*0.25
+                if mapState.zoom - dir*configs.zoomSpeed > 0 then
+                    mapState.zoom = mapState.zoom - dir*configs.zoomSpeed
                 end
             end
         end,
@@ -384,8 +424,8 @@ mapRenderer = buttonAPI.mkbutton(
                     x = 0,
                     y = 0
                 }
-                mapState.x = mapState.x-(mx-self.pre.x)
-                mapState.y = mapState.y-(my-self.pre.y)
+                mapState.x = mapState.x-(mx-self.pre.x)*configs.mapSpeed
+                mapState.y = mapState.y-(my-self.pre.y)*configs.mapSpeed
                 self.pre = {x = mx,y = my}
             end
         end
@@ -436,6 +476,32 @@ del = buttonAPI.mkbutton{
     end
 }.addTo(bundle)
 
+center = buttonAPI.mkbutton(
+    {
+        x = del.x+del.length+1,
+        y = mapRenderer.y + mapRenderer.height-1,
+        text = "|center|",
+        bg = colors.gray,
+        onTick = function(self)
+            self.active = map.clicked
+        end,
+        onDown = function(self,but,mx,my)
+            if self:isIn(mx,my) then
+                self.bg = colors.lightGray
+                self.clicked = true
+                mapState.x = computer.blockPos.x
+                mapState.y = computer.blockPos.z
+            end
+        end,
+        onUp = function(self,mx,my)
+            if self.clicked then
+                self.clicked = false
+                self.bg = colors.gray
+            end
+        end
+    }
+).addTo(bundle)
+
 readx = makeReader({
     bundle = bundle,
     parent = config,
@@ -466,6 +532,26 @@ readz = makeReader({
     x = bg.x+3,
     y = bg.y+4
 })
+readMapSpeed = makeReader({
+    bundle = bundle,
+    parent = config,
+    text = "mapSpeed|",
+    textbg = colors.orange,
+    bgc = colors.orange,
+    lim = {'.','0','1','2','3','4','5','6','7','8','9'},
+    x = bg.x+#"mapSpeed|",
+    y = bg.y+6
+})
+readZoomSpeed = makeReader({
+    bundle = bundle,
+    parent = config,
+    text = "zoomSpeed|",
+    textbg = colors.orange,
+    bgc = colors.orange,
+    lim = {'.','0','1','2','3','4','5','6','7','8','9'},
+    x = bg.x+#"zoomSpeed|",
+    y = bg.y+8
+})
 control = buttonAPI.mkbutton(
     {
         text = "control ",
@@ -490,6 +576,87 @@ control = buttonAPI.mkbutton(
 control.x = width - control.length
 makeHeader(bundle,control,"o|",colors.orange)
 
+updateComputers = buttonAPI.mkbutton(
+    {
+        text = "update computers",
+        x = bg.x+1,
+        y = bg.y,
+        onTick = function(self)
+            self.active = control.clicked
+        end,
+        onDown = function(self,but,mx,my)
+            if self.active and self:isIn(mx,my) then
+                self.bg = colors.lightGray
+                self.clicked = true
+                rednet.broadcast("","find")
+            end
+        end,
+        onUp = function(self,but,mx,my)
+            if self.clicked then
+                self.bg = colors.gray
+                self.clicked = false
+            end
+        end
+    }
+).addTo(bundle)
+makeHeader(bundle,updateComputers,">",colors.orange)
+
+id = makeReader({
+    bundle = bundle,
+    parent = control,
+    text = "id>",
+    textbg = colors.orange,
+    bgc = colors.orange,
+    lim = {'0','1','2','3','4','5','6','7','8','9'},
+    x = bg.x+#"id>",
+    y = bg.y+2
+})
+protocol = makeReader(
+    {
+        bundle = bundle,
+        parent = control,
+        text = "protocol>",
+        textbg = colors.orange,
+        bgc = colors.orange,
+        x = bg.x+#"protocol>",
+        y = bg.y+4
+    }
+)
+message = makeReader(
+    {
+        bundle = bundle,
+        parent = control,
+        text = "message>",
+        textbg = colors.orange,
+        bgc = colors.orange,
+        x = bg.x+#"message>",
+        y = bg.y+6
+    }
+)
+send = buttonAPI.mkbutton(
+    {
+        text = "send",
+        x = bg.x+1,
+        y = bg.y+8,
+        onTick = function(self)
+            self.active = control.clicked
+        end,
+        onDown = function(self,but,mx,my)
+            if self.active and self:isIn(mx,my) then
+                self.bg = colors.lightGray
+                self.clicked = true
+                rednet.send(tonumber(id.text),string.sub(message.text,1,#message.text-1),string.sub(protocol.text,1,#protocol.text-1))
+            end
+        end,
+        onUp = function(self,but,mx,my)
+            if self.clicked then
+                self.bg = colors.gray
+                self.clicked = false
+            end
+        end
+    }
+).addTo(bundle)
+makeHeader(bundle,send,">",colors.orange)
 infoRenderer = buttonAPI.mkbutton(
     {
         active = false,
@@ -518,24 +685,24 @@ info = buttonAPI.mkbutton(
     }
 ).addTo(bundle)
 
-computer = simpleMapAdd("x",{name = "computer"},dir,mapState)
-
-point = simpleMapAdd("o",{x = -14,z = -5,name = "bite"},dir,mapState)
-
+computer = simpleMapAdd("x",{name = "computer",x = configs.x,y = configs.y,z = configs.z},dir,mapState)
 
 indicator = buttonAPI.mkbutton(
     {
         active = false,
-        text = "[zoom:"..tostring(mapState.zoom).." x:"..tostring(mapState.x+1).." z:"..tostring(mapState.y+1).."]",
+
+        text = "[zm:"..tostring(mapState.zoom).." x:"..tostring(mapState.x+1).." z:"..tostring(mapState.y+1).."]",
         x = mapRenderer.x,
         y = mapRenderer.y,
         bg = colors.orange,
         onTick = function(self)
             self.active = map.clicked
-            self.text = "[zoom:"..tostring(mapState.zoom).." x:"..tostring(mapState.x+1).." z:"..tostring(mapState.y+1).."]"
+            self.text = "[zm:"..tostring(mapState.zoom).." x:"..tostring(mapState.x+1).." z:"..tostring(mapState.y+1).."]"
         end
     }
 ).addTo(bundle)
+
+local ids = {}
 
 eventHandler.eventLookUp = {
     {
@@ -577,13 +744,13 @@ eventHandler.eventLookUp = {
         react = function(eventData)
             local key = keys.getName(eventData[2])
             if key == "w" then
-                mapState.y = mapState.y-1
+                mapState.y = mapState.y-configs.mapSpeed
             elseif key == "s" then
-                mapState.y = mapState.y+1
+                mapState.y = mapState.y+configs.mapSpeed
             elseif key == "a" then
-                mapState.x = mapState.x-1
+                mapState.x = mapState.x-configs.mapSpeed
             elseif key == "d" then
-                mapState.x = mapState.x+1
+                mapState.x = mapState.x+configs.mapSpeed
             end
             buttonAPI.handle(bundle,"key",key)
         end
@@ -600,6 +767,18 @@ eventHandler.eventLookUp = {
         react = function(eventData)
             local char = eventData[2]
             buttonAPI.handle(bundle,"char",char)
+        end
+    },
+    {
+        event = "rednet_message",
+        react = function(eventData)
+            local sender,message,protocol = eventData[2],eventData[3],eventData[4]
+            local data = textutils.unserialise(message)
+            if protocol == "find" then
+                if not ids[sender] then
+                    ids[sender] = simpleMapAdd(data.marker or "c",data,dir,mapState,2)
+                end
+            end
         end
     }
 }
