@@ -87,10 +87,12 @@ function buttonAPI.render(bundle,win)
     win.setVisible(false)
     win.clear()
     local new = {}
-    for k,v in pairs(bundle) do
-        new[#bundle-k+1] = v
+    for i=1,#bundle do
+        button = bundle[i]
+        new[#bundle-i+1] = button
     end
-    for i,button in ipairs(new) do
+    for i=#new,1,-1 do
+        button = bundle[i]
         button.win = win
         button:onTick()
         if button.active then
@@ -105,50 +107,59 @@ function buttonAPI.handle(bundle,case,...)
     args = {...}
     if case == "down" then
         but,mx,my = args[1],args[2],args[3]
-        for i,button in ipairs(bundle) do
-            button:onDown(but,mx,my)
-            if button.active and button.unclickable and button:isIn(mx,my) then
-                break
+        for i=1,#bundle do
+            button = bundle[i]
+            if button then
+                button:onDown(but,mx,my)
             end
         end
     elseif case == "up" then
         but,mx,my = args[1],args[2],args[3]
-        for i,button in ipairs(bundle) do
-            button:onUp(but,mx,my)
-            if button:isIn(mx,my) then    
-                break
+        for i=1,#bundle do
+            button = bundle[i]
+            if button then
+                button:onUp(but,mx,my)
             end
         end
     elseif case == "drag" then
         but,mx,my = args[1],args[2],args[3]
-        for i,button in ipairs(bundle) do
-            button:onDrag(but,mx,my)
-            if button:isIn(mx,my) then
-                break
+        for i=1,#bundle do
+            button = bundle[i]
+            if button then
+                button:onDrag(but,mx,my)
             end
         end
     elseif case == "scroll" then
         dir,mx,my = args[1],args[2],args[3]
-        for i,button in ipairs(bundle) do
-            button:onScroll(dir,mx,my)
-            if button:isIn(mx,my) then
-                break
+        for i=1,#bundle do
+            button = bundle[i]
+            if button then
+                button:onScroll(dir,mx,my)
             end
         end
     elseif case == "char" then
         char = args[1]
-        for i,button in ipairs(bundle) do
-            button:onChar(char)
+        for i=1,#bundle do
+            button = bundle[i]
+            if button then
+                button:onChar(char)
+            end
         end
     elseif case == "key" then
         key = args[1]
-        for i,button in ipairs(bundle) do
-            button:onKey(key)
+        for i=1,#bundle do
+            button = bundle[i]
+            if button then
+                button:onKey(key)
+            end
         end
     elseif case == "key_up" then
         key = args[1]
-        for i,button in ipairs(bundle) do
-            button:onKeyUp(key)
+        for i=1,#bundle do
+            button = bundle[i]
+            if button then
+                button:onKeyUp(key)
+            end
         end
     end
 end

@@ -13,14 +13,22 @@ bundle = {}
 
 dir = "north"
 
+table.remove = function(tab,i)
+    for j = i,#tab do
+        tab[j] = tab[j+1]
+    end
+end
+
 function makeReader(args--[[bundle,parent,text,textbg,bg,lim,x,y]])
-    bundle = args.bundle or {}
-    text = args.text or ""
-    textbg = args.textbg or colors.lightGray
-    x = args.x or 1
-    y = args.y or 1
-    parent = args.parent or {}
-    lim = args.lim
+    local bundle = args.bundle or {}
+    local text = args.text or ""
+    local textbg = args.textbg or colors.lightGray
+    local x = args.x or 1
+    local y = args.y or 1
+    local parent = args.parent or {}
+    local lim = args.lim
+    local bgc = args.bgc or colors.gray
+    local fgc = args.fgc or colors.white
     
     local textB = buttonAPI.mkbutton(
         {
@@ -44,6 +52,7 @@ function makeReader(args--[[bundle,parent,text,textbg,bg,lim,x,y]])
             x = x,
             y = y,
             text = " ",
+            fg = fgc,
             onTick = function(self)
                 self.draw = function(button)
                     button.win.setCursorPos(button.x,button.y)
@@ -75,7 +84,7 @@ function makeReader(args--[[bundle,parent,text,textbg,bg,lim,x,y]])
             end,
             onDown = function(self,but,mx,my)
                 if self:isIn(mx,my) then
-                    self.bg = colors.orange
+                    self.bg = bgc
                     self.clicked = true
                     self.cursor = mx-self.x+1
                 else
@@ -85,7 +94,7 @@ function makeReader(args--[[bundle,parent,text,textbg,bg,lim,x,y]])
             end,
             onChar = function(self,char)
                 if self.clicked then
-                    if args.lim then
+                    if lim then
                         local done = false
                         for i,c in pairs(lim) do
                             if char == c then
@@ -166,15 +175,22 @@ function mapToWorld(dir,centerx,centery,ref,refy,x,y,zoom)
     }
 end
 
-function addMapPoint(text,data,bundle,parent,dir,centerx,centery,state,x,y)
-    x = x or 0
-    y = y or 0
+function addMapPoint(text,data,bundle,parent,dir,centerx,centery,state,i)
+    data.name = data.name or "target"
+    i = i or 1
+    data.x = data.x or 0
+    data.y = data.y or 0
+    data.z = data.z or 0
+    data.x = math.floor(data.x)
+    data.y = math.floor(data.y)
+    data.z = math.floor(data.z)
+    x = data.x
+    y = data.z
     refx,refy,zoom = state.x,state.y,state.zoom
     local mapPoint = buttonAPI.mkbutton{
         x = 1,
         y = 1,
         text = text,
-        data = data,
         active = false,
         selected = false,
         bg = colors.black,
@@ -208,11 +224,46 @@ function addMapPoint(text,data,bundle,parent,dir,centerx,centery,state,x,y)
             end
         end,
         onTick = function(self)
+            data.x = self.blockPos.x
+            data.y = self.blockPos.y
+            data.z = self.blockPos.z
+            self.draw = function(button)
+                button.win.setCursorPos(button.x,button.y)
+                button.win.setBackgroundColor(button.bg)
+                button.win.setTextColor(button.fg)
+                button.win.write(button.text)
+                local count = 0
+                for j = 1,#bundle do
+                    button = bundle[j]
+                    if button.selected then
+                        count = count + 1
+                    end
+                end
+                if self.selected and count == 1 then
+                    button.win.setCursorPos(info.x,info.y+1)
+                    button.win.setBackgroundColor(colors.gray)
+                    button.win.setTextColor(colors.white)
+                    button.win.write("name:"..data.name)
+                    local j = 1
+                    for k,v in pairs(data) do
+                        if k ~= "name" then
+                            j = j + 1
+                            button.win.setCursorPos(info.x,info.y+j)
+                            button.win.setBackgroundColor(colors.gray)
+                            button.win.setTextColor(colors.white)
+                            button.win.write(k..":"..v)
+                        end
+                    end
+                end
+                button.win.setBackgroundColor(colors.black)
+                button.win.setTextColor(colors.white)
+            end
             refx,refy,zoom = state.x,state.y,state.zoom
-            self.pos = worldToMap(dir,centerx,centery,refx,refy,self.blockPos.x,self.blockPos.y,zoom)
+            self.pos = worldToMap(dir,centerx,centery,refx,refy,self.blockPos.x,self.blockPos.z,zoom)
             self.x = math.floor(self.pos.x)
             self.y = math.floor(self.pos.y)
             self.active = parent.clicked
+            self.fg = self.selected and colors.cyan or colors.white
             if not self.isIn({
                 isBoxed = false,
                 x = mapRenderer.x,
@@ -225,8 +276,8 @@ function addMapPoint(text,data,bundle,parent,dir,centerx,centery,state,x,y)
                 self.active = false
             end
         end
-    }.addTo(bundle)
-    mapPoint.blockPos = {x=x,y=y}
+    }.addTo(bundle,i)
+    mapPoint.blockPos = {x=data.x,y=data.y,z=data.z}
     return mapPoint
 end
 
@@ -253,6 +304,8 @@ config = buttonAPI.mkbutton(
                     self.clicked = true
                     map.clicked = false
                     map.bg = colors.gray
+                    control.clicked = false
+                    control.bg = colors.gray
                 else
                     self.bg = colors.gray
                     self.clicked = false
@@ -267,7 +320,7 @@ makeHeader(bundle,config,"o|",colors.orange)
 map = buttonAPI.mkbutton(
     {
         text = "map ",
-        y = bg.y+2,
+        y = bg.y+4,
         onDown = function(self,but,mx,my)
             if self:isIn(mx,my) then
                 if not self.clicked then
@@ -275,6 +328,8 @@ map = buttonAPI.mkbutton(
                     self.clicked = true
                     config.clicked = false
                     config.bg = colors.gray
+                    control.clicked = false
+                    control.bg = colors.gray
                 else
                     self.bg = colors.gray
                     self.clicked = false
@@ -306,7 +361,8 @@ mapRenderer = buttonAPI.mkbutton(
             self.active = map.clicked
             if computer.pos then
                 computer.blockPos.x = tonumber(readx.text) or 0
-                computer.blockPos.y = tonumber(readz.text) or 0
+                computer.blockPos.y = tonumber(ready.text) or 0
+                computer.blockPos.z = tonumber(readz.text) or 0
             end
         end,
         onDown = function(self,but,mx,my)
@@ -336,13 +392,9 @@ mapRenderer = buttonAPI.mkbutton(
     }
 ).addTo(bundle)
 
-function simpleMapAdd(text,data,dir,state,x,y)
-    return addMapPoint(text,data,bundle,map,dir,(mapRenderer.x+mapRenderer.length)/2,(mapRenderer.y+mapRenderer.height)/2,state,x,y)
+function simpleMapAdd(text,data,dir,state,i)
+    return addMapPoint(text,data,bundle,map,dir,(mapRenderer.x+mapRenderer.length)/2,(mapRenderer.y+mapRenderer.height)/2,state,i)
 end
-
-computer = simpleMapAdd("x",{},dir,mapState)
-
-point = simpleMapAdd("o",{},dir,mapState,-14,-5)
 
 cursor = buttonAPI.mkbutton{
     text = "+",
@@ -354,20 +406,6 @@ cursor = buttonAPI.mkbutton{
 }.addTo(bundle)
 cursor.x = math.floor((mapRenderer.x+mapRenderer.length)/2)+1
 cursor.y = math.floor((mapRenderer.y+mapRenderer.height)/2)+1
-
-indicator = buttonAPI.mkbutton(
-    {
-        active = false,
-        text = "[zoom:"..tostring(mapState.zoom).." x:"..tostring(mapState.x+1).." z:"..tostring(mapState.y+1).."]",
-        x = mapRenderer.x,
-        y = mapRenderer.y,
-        bg = colors.orange,
-        onTick = function(self)
-            self.active = map.clicked
-            self.text = "[zoom:"..tostring(mapState.zoom).." x:"..tostring(mapState.x+1).." z:"..tostring(mapState.y+1).."]"
-        end
-    }
-).addTo(bundle)
 
 del = buttonAPI.mkbutton{
     x = mapRenderer.x,
@@ -382,8 +420,8 @@ del = buttonAPI.mkbutton{
             self.bg = colors.lightGray
             self.clicked = true
             for i=1,#bundle do
-                v = bundle[i] or {}
-                if v.selected then
+                button = bundle[i]
+                if button and button.selected then
                     table.remove(bundle,i)
                     break
                 end
@@ -403,7 +441,7 @@ readx = makeReader({
     parent = config,
     text = "x|",
     textbg = colors.orange,
-    bg = colors.orange,
+    bgc = colors.orange,
     lim = {'-','0','1','2','3','4','5','6','7','8','9'},
     x = bg.x+3,
     y = bg.y
@@ -413,7 +451,7 @@ ready = makeReader({
     parent = config,
     text = "y|",
     textbg = colors.orange,
-    bg = colors.orange,
+    bgc = colors.orange,
     lim = {'-','0','1','2','3','4','5','6','7','8','9'},
     x = bg.x+3,
     y = bg.y+2
@@ -423,11 +461,35 @@ readz = makeReader({
     parent = config,
     text = "z|",
     textbg = colors.orange,
-    bg = colors.orange,
+    bgc = colors.orange,
     lim = {'-','0','1','2','3','4','5','6','7','8','9'},
     x = bg.x+3,
     y = bg.y+4
 })
+control = buttonAPI.mkbutton(
+    {
+        text = "control ",
+        y = bg.y+2,
+        onDown = function(self,but,mx,my)
+            if self:isIn(mx,my) then
+                if not self.clicked then
+                    self.bg = colors.lightGray
+                    self.clicked = true
+                    config.clicked = false
+                    config.bg = colors.gray
+                    map.clicked = false
+                    map.bg = colors.gray
+                else
+                    self.bg = colors.gray
+                    self.clicked = false
+                end
+            end
+        end,
+    }
+).addTo(bundle)
+control.x = width - control.length
+makeHeader(bundle,control,"o|",colors.orange)
+
 infoRenderer = buttonAPI.mkbutton(
     {
         active = false,
@@ -456,7 +518,24 @@ info = buttonAPI.mkbutton(
     }
 ).addTo(bundle)
 
+computer = simpleMapAdd("x",{name = "computer"},dir,mapState)
 
+point = simpleMapAdd("o",{x = -14,z = -5,name = "bite"},dir,mapState)
+
+
+indicator = buttonAPI.mkbutton(
+    {
+        active = false,
+        text = "[zoom:"..tostring(mapState.zoom).." x:"..tostring(mapState.x+1).." z:"..tostring(mapState.y+1).."]",
+        x = mapRenderer.x,
+        y = mapRenderer.y,
+        bg = colors.orange,
+        onTick = function(self)
+            self.active = map.clicked
+            self.text = "[zoom:"..tostring(mapState.zoom).." x:"..tostring(mapState.x+1).." z:"..tostring(mapState.y+1).."]"
+        end
+    }
+).addTo(bundle)
 
 eventHandler.eventLookUp = {
     {
@@ -467,7 +546,7 @@ eventHandler.eventLookUp = {
             if but == 2 and map.clicked then
                 if mapRenderer:isIn(mx,my) then
                     pos = mapToWorld(dir,(mapRenderer.x+mapRenderer.length)/2,(mapRenderer.y+mapRenderer.height)/2,mapState.x,mapState.y,mx,my,mapState.zoom)
-                    simpleMapAdd("T",{},dir,mapState,pos.x,pos.y)
+                    simpleMapAdd("T",{x = pos.x,z = pos.y},dir,mapState,2)
                 end
             end
         end,
