@@ -370,6 +370,8 @@ map = buttonAPI.mkbutton(
                     config.bg = colors.gray
                     control.clicked = false
                     control.bg = colors.gray
+                    files.clicked = false
+                    files.bg = colors.gray
                 else
                     self.bg = colors.gray
                     self.clicked = false
@@ -565,12 +567,14 @@ control = buttonAPI.mkbutton(
                     config.bg = colors.gray
                     map.clicked = false
                     map.bg = colors.gray
+                    files.clicked = false
+                    files.bg = colors.gray
                 else
                     self.bg = colors.gray
                     self.clicked = false
                 end
             end
-        end,
+        end
     }
 ).addTo(bundle)
 control.x = width - control.length
@@ -656,6 +660,121 @@ send = buttonAPI.mkbutton(
         end
     }
 ).addTo(bundle)
+
+files = buttonAPI.mkbutton(
+    {
+        text = "files ",
+        y = bg.y+6,
+        onDown = function(self,but,mx,my)
+            if self:isIn(mx,my) then
+                if not self.clicked then
+                    self.bg = colors.lightGray
+                    self.clicked = true
+                    config.clicked = false
+                    config.bg = colors.gray
+                    map.clicked = false
+                    map.bg = colors.gray
+                    control.clicked = false
+                    control.bg = colors.gray
+                else
+                    self.bg = colors.gray
+                    self.clicked = false
+                end
+            end
+        end
+    }
+).addTo(bundle)
+files.x = width - files.length
+makeHeader(bundle,files,"o|",colors.orange)
+
+run = buttonAPI.mkbutton(
+    {
+        text = "run>",
+        bg = colors.orange,
+        x = bg.x,
+        y = bg.y,
+        onTick = function(self)
+            self.active = files.clicked
+        end
+    }
+).addTo(bundle)
+runS = buttonAPI.mkbutton(
+    {
+        text = "o-",
+        x = bg.x+#"run>",
+        y = bg.y,
+        onDown = function(self,but,mx,my)
+            if self.active and self:isIn(mx,my) then
+                if not self.clicked then
+                    self.clicked = true
+                    self.text = "-o"
+                    self.bg = colors.lightGray
+                else
+                    self.clicked = false
+                    self.text = "o-"
+                    self.bg = colors.gray
+                end
+            end
+        end,
+        onTick = function(self)
+            self.active = files.clicked
+        end
+    }
+).addTo(bundle)
+idF = makeReader(
+    {
+        x = bg.x+4,
+        y = bg.y+2,
+        text = "id",
+        textbg = colors.orange,
+        bundle = bundle,
+        lim = {'0','1','2','3','4','5','6','7','8','9'},
+        parent = files
+    }
+)
+fileName = makeReader(
+    {
+        x = bg.x+4,
+        y = bg.y+4,
+        text = "file",
+        textbg = colors.orange,
+        bundle = bundle,
+        parent = files
+    }
+)
+sendF = buttonAPI.mkbutton(
+    {
+        text = "send",
+        x = bg.x+1,
+        y = bg.y+6,
+        onTick = function(self)
+            self.active = files.clicked
+        end,
+        onDown = function(self,but,mx,my)
+            if self.active and self:isIn(mx,my) then
+                self.bg = colors.lightGray
+                self.clicked = true
+                if fileName.text ~= " " and idF.text ~= " " and fs.exists(string.sub(fileName.text,1,#fileName.text-1)) then
+                    fileContents = fs.open(string.sub(fileName.text,1,#fileName.text-1),"r").readAll()
+                    toSend = {
+                        run = runS.clicked,
+                        name = fileName.text,
+                        fileContents = fileContents
+                    }
+                    rednet.send(tonumber(idF.text),textutils.serialise(toSend),"file")
+                end
+            end
+        end,
+        onUp = function(self,but,mx,my)
+            if self.clicked then
+                self.bg = colors.gray
+                self.clicked = false
+            end
+        end
+    }
+).addTo(bundle)
+makeHeader(bundle,sendF,">",colors.orange)
+
 makeHeader(bundle,send,">",colors.orange)
 infoRenderer = buttonAPI.mkbutton(
     {
@@ -710,12 +829,6 @@ eventHandler.eventLookUp = {
         react = function(eventData)
             local but,mx,my = eventData[2],eventData[3],eventData[4]
             buttonAPI.handle(bundle,"down",but,mx,my)
-            if but == 2 and map.clicked then
-                if mapRenderer:isIn(mx,my) then
-                    pos = mapToWorld(dir,(mapRenderer.x+mapRenderer.length)/2,(mapRenderer.y+mapRenderer.height)/2,mapState.x,mapState.y,mx,my,mapState.zoom)
-                    simpleMapAdd("T",{x = pos.x,z = pos.y},dir,mapState,2)
-                end
-            end
         end,
     },
     {
